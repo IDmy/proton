@@ -1,5 +1,7 @@
 .ipynb_checkpoints/
 data/
+uploads/
 gurobi.log
 *.csv
-
+*.idea
+*.fuse*
