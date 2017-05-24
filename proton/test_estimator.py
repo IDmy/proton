@@ -1,8 +1,5 @@
 import pandas as pd
 
-import unittest
-import random
-
 from proton.estimator import AccuracyHandler, LinearBEDPredictor, BEDPredictorUpperBoundNaive
 from proton.optimizer import LPOptimizer
 

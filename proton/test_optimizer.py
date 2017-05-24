@@ -1,7 +1,7 @@
-import numpy as np
-
-import unittest
 import random
+import unittest
+
+import numpy as np
 
 from proton.optimizer import LPOptimizer
 
