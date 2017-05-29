@@ -23,9 +23,15 @@ class ProtonOptimizer(object):
         return {}
 
     def pretty_print(self):
-        """Override to print your models output in a meaningful way for debugging purposes"""
-        print("The optimum is " + str(self.get_optimum()))
+        solution = self.get_optimum()
+        for patient, fractions in solution.items():
+            print(("Patient " + str(patient) + " should receive " + str(fractions) + " fractions"))
 
+    def get_total_BED(self):
+        total = 0
+        for patient, fractions in self.get_optimum().items():
+            total += self.BED[patient, fractions]
+        return total
 
 class LPOptimizer(ProtonOptimizer):
     """Concrete linear implementation of the ProtonOptimizer interface"""
@@ -77,14 +83,48 @@ class LPOptimizer(ProtonOptimizer):
         else:
             print("Infeasible model")
 
-    def get_total_BED(self):
-        return self.m.getObjective().getValue()
-
-    def pretty_print(self):
-        solution = self.get_optimum()
-        for patient, fractions in solution.items():
-            print(("Patient " + str(patient) + " should receive " + str(fractions) + " fractions"))
-
     def get_optimum(self):
         self._solve()
         return self.optimum
+
+
+class HeuristicOptimizer(ProtonOptimizer):
+    """
+    Concrete heuristic implementation of the ProtonOptimizer interface
+    This will produce the globally optimum solution assuming concavity in the BED matrix
+    which may or may not be true in the real case
+    """
+    def __init__(self):
+        self.optimum = {}
+        self.BED = None
+
+    def build(self, BED, capacity=100, model_name='heuristic_optimizer'):
+        self.BED = BED
+        self.capacity = capacity
+        self.num_accesses = 0
+
+    def get_optimum(self):
+        num_patients = self.BED.shape[0]
+        max_fractions_per_patient = self.BED.shape[1] - 1
+
+        # Initialize
+        state = [0] * num_patients
+        benefit = self.BED[:, 1] - self.BED[:, 0]
+        self.num_accesses += num_patients
+
+        for i in range(self.capacity):
+            patient = np.argmax(benefit)
+            value = benefit[patient]
+            state[patient] = state[patient] + 1
+            if state[patient] == max_fractions_per_patient:
+                benefit[patient] = 0
+            else:
+                benefit[patient] = self.BED[patient, state[patient] + 1] - self.BED[patient, state[patient]]
+            self.num_accesses += 1
+
+        return dict(zip(range(num_patients), state))
+
+    def get_accesses(self):
+        if not self.num_accesses:
+            self.get_optimum()
+        return self.num_accesses
