@@ -5,8 +5,6 @@ import time
 from itertools import chain
 import matplotlib.pyplot as plt
 
-# import optimizers to be tested
-from .optimizer import LPOptimizer
 
 class LinearBEDPredictor(object):
     """
@@ -162,9 +160,109 @@ class BEDPredictorUpperBoundNaive(LinearBEDPredictor):
         return BED_estimates
 
 
+
+#from sklearn.metrics import mean_squared_error
+class BED_estimate(LinearBEDPredictor):
+
+    def besenham(self, m, n):
+        '''
+        Choose m evenly spaced elements from a sequence of length n
+        '''
+        idx = [i * n // m + n // (2 * m) for i in range(m)]
+        return idx
+
+    def estimate_vector(self, input_vector, threshold, length_output_vector):
+        '''
+        An alternative estimation method of the BED matrix.
+
+        Parameters
+        -----------
+        input_vector: list
+                A n-length list
+        threshold : int
+                The threshold value
+        output_vector: int
+                The desired m-length estimated BED vector
+        Returns
+        -----------
+        list
+            The estimated m-length BED vector
+
+        Raises
+        -----------
+        ValueError
+            If input_vector>output_vector
+
+        '''
+        length_of_input = len(input_vector)
+        # Raise error in case that the length of the output vector is smaller than the input vector
+        if length_output_vector < length_of_input:
+            raise ValueError("Granularity of output should be bigger or equal than input")
+
+        # The output vector
+        output = np.zeros(length_output_vector)
+        # In order to keep the same indexes, the 'new' input vector is equally size as the output vector
+        extend_input = np.zeros_like(output)
+        extend_input[0], extend_input[-1] = input_vector[0], input_vector[-1]
+        # Bresenham's line algorithm
+        # Note: I already allocate two points of the input vector
+        m = length_of_input - 2
+        n = length_output_vector - 1
+        for (x, y) in zip(self.besenham(m, n), input_vector[1:-1]):
+            extend_input[x] = y
+        idxs = list(np.nonzero(extend_input)[0])
+        for idx_1, idx_2 in zip(idxs[0:-1], idxs[1:]):
+            temp_1 = extend_input[idx_1]
+            temp_2 = extend_input[idx_2]
+            diff = np.diff([temp_1, temp_2])
+            if diff < threshold:
+                linspace = np.arange(idx_1, idx_2 + 1, 1)
+                output[idx_1:idx_2 + 1] = np.interp(linspace, [idx_1, idx_2], [temp_1, temp_2])
+                output[idx_2 + 1:] = temp_2
+                return output
+            else:
+                linspace = np.arange(idx_1, idx_2 + 1, 1)
+                output[idx_1:idx_2 + 1] = np.interp(linspace, [idx_1, idx_2], [temp_1, temp_2])
+        return output
+
+    def threshold(self, test = False):
+        if test:
+            return [0] * self.num_patients
+        m = self.granularity - 2
+        n = self.max_fractions_per_patient - 1
+        x = [0]
+        x.extend(self.besenham(m, n))
+        x.extend([self.max_fractions_per_patient - 1])
+        thresh = [self._BED[j, x] for j in np.arange(self.num_patients)]
+        threshold = [np.mean(np.diff(i)) for i in thresh]
+        return threshold
+
+    def estimate(self, granularity):
+        self.granularity = granularity
+        threshold = self.threshold()
+        number_of_patients = self.num_patients
+        self.BED_estimate = np.zeros(self._BED.shape)
+        # Note: I already allocate two points of the input vector
+        m = self.granularity - 2
+        n = self.max_fractions_per_patient - 1
+        x = [0]
+        x.extend(self.besenham(m, n))
+        x.extend([n])
+        input_vector = self._BED[:, x]
+        for (patient, input, matrix_row, thresh) in zip(self._BED, input_vector, np.arange(number_of_patients),
+                                                        threshold):
+            self.BED_estimate[matrix_row, :] = self.estimate_vector(input, thresh, self.max_fractions_per_patient)
+        return self.BED_estimate
+
+if __name__ == "__main__":
+    data = pd.read_csv('data/PayoffMatrix.txt', delim_whitespace=True, header=None)
+    BED = data.values
+    estimator = BED_estimate(BED)
+    estimated_BED = estimator.estimate(3)
+    print(estimated_BED)
+
 class AccuracyHandler(object):
     """AccuracyHandler handles evaluating of LP model using different BED matrixes."""
-    #from .optimizer import LPOptimizer
 
     def __init__(self, actual_BED, gran_range):
         self.actual_BED = actual_BED
@@ -231,8 +329,14 @@ class AccuracyHandler(object):
         avg_BED = self.get_naive_solution(optimizer)
         optimal_BED = self.get_true_solution(optimizer)
 
+        iterative_point_predictor = BED_estimate(self.actual_BED)
+        iterative_point_estimate = self.get_predictor_solution(iterative_point_predictor, optimizer)
+
         x_li, y_li = self._get_coords(low_bound_lin_internp)
         plt.plot(x_li, y_li, label="interpolated estimation")
+
+        x_it, y_it = self._get_coords(iterative_point_estimate)
+        plt.plot(x_it, y_it, label="iterative point estimation")
 
         x_wn, y_wn = self._get_coords(upper_bound_naive)
         plt.plot(x_wn, y_wn, label="upper bound case")
@@ -252,137 +356,3 @@ class AccuracyHandler(object):
         plt.ylabel('BED')
         plt.xticks(gran_range)
         plt.show()
-        
-        
-#An alternative approach to comput the BED matrix
-
-from itertools import zip_longest
-from sklearn.metrics import mean_squared_error
-import numpy as np
-
-class BED_estimate(object):
-    
-    def __init__(self, BED):
-        self.BED = np.array(BED)
-        self.number_of_patients, self.number_of_fractions = np.shape(BED)
-        self.input = self.BED[:, [0, 7, 15]]     
-        self.shape = np.shape(BED)
-
-    def root_mean_square_error(self, estimate, real):
-        """
-        Computes and returns the mean squared error between the actual and the estimated BED
-        matrix.
-        """
-        return np.sqrt(mean_squared_error(real, estimate))  
-        
-
-    def estimate_vector(self, input_vector, threshold, output_vector):
-        '''
-        An alternative estimation method of the BED matrix. 
-
-        Parameters
-        -----------
-        input_vector: list
-                A n-length list
-        threshold : int
-                The threshold value
-        output_vector: list
-                The desired m-length estimated BED vector 
-        Returns
-        -----------
-        list
-            The estimated m-length BED vector
-
-        Raises
-        -----------
-        ValueError 
-            If input_vector>output_vector
-
-        '''
-        length_of_input = len(input_vector)
-        length_output_vector = output_vector  
-        #Raise error in case that the length of the output vector is smaller than the input vector
-        if length_output_vector<length_of_input:
-            raise ValueError ("Granularity of output should be bigger or equal than input")
-
-        step = (length_output_vector/ length_of_input) 
-
-        #The output vector
-        output = np.zeros(output_vector)
-        #In order to keep the same indexes, the 'new' input vector is equally size as the output vector 
-        extend_input = np.zeros_like(output)
-        extend_input[0], extend_input[-1] = input_vector[0], input_vector[-1]
-        #Bresenham's line algorithm 
-        f = lambda m, n: [i*n//m + n//(2*m) for i in range(m)]
-        #Note: I already allocate two points of the input vector
-        m = length_of_input - 2
-        n = length_output_vector - 1
-        for (x,y) in zip(f(m, n), input_vector[1:-1]) :
-            extend_input[x] = y 
-        idxs = list(np.nonzero(extend_input)[0])
-        for idx_1, idx_2 in zip(idxs[0:-1], idxs[1:]):
-            temp_1 = extend_input[idx_1]
-            temp_2 = extend_input[idx_2]
-            diff = np.diff([temp_1, temp_2])
-            if diff<threshold:
-                linspace = np.arange(idx_1, idx_2+1, 1)
-                output [idx_1 :idx_2+1] = np.interp(linspace, [idx_1, idx_2], [temp_1, temp_2])
-                output[idx_2+1:] = temp_2
-                return output
-            else:
-                linspace = np.arange(idx_1, idx_2+1, 1)
-                output [idx_1 :idx_2+1] = np.interp(linspace, [idx_1, idx_2], [temp_1, temp_2])
-        return output
-    
-    
-    def threshold(self):
-        threshold = np.mean([np.mean(np.diff(self.BED[i])) for i in np.arange(self.number_of_patients)])
-        return threshold
-    
-    def estimate(self):
-        threshold = self.threshold()
-        number_of_patients = self.number_of_patients
-        self.BED_estimate = np.zeros(self.shape)
-        input_vector = self.input
-        for (patient, input, matrix_row) in zip(self.BED, input_vector, np.arange(number_of_patients)):
-            self.BED_estimate[matrix_row, :] = self.estimate_vector(input, threshold, self.number_of_fractions)
-        return self.BED_estimate        
-    
-import unittest
-import numpy as np
-
-
-class EstimatorTest(unittest.TestCase):
-    def mock_input_vector(self):
-        input_vector = [1, 2, 3]
-        return input_vector
-    
-    def test_error(self):
-        'When the length m of the output vector is smaller than the input vector'
-        input = self.mock_input_vector()
-        m = (len(input))-1
-        threshold = 2
-        self.assertRaises(ValueError, finite_difference_new, input, threshold, m) 
-        
-    def test_small_threshold(self):
-        "When the the difference of the first two points of the m-length input vector is bigger than the threshold, we expect the algorithm to interpolate only on them and set the rest m-2 points equal to the second point. "
-        input = self.mock_input_vector()
-        m = 6 
-        threshold = 2
-        expected = np.interp([0, 1, 2], [0,2], [input[0], input[1]])
-        expected = np.append(expected, [(m-len(expected))*[input[1]]])
-        estimated = finite_difference_new(input, 2, m)
-        self.assertCountEqual(estimated, expected)
-        
-    def test_big_threshold(self):
-        "When the the difference of the m points of input vector is bigger than the threshold,          we expect the algorithm to interpolate to all points. "
-        input = self.mock_input_vector()
-        m = 6 
-        threshold = 0.5
-        expected = np.interp(np.arange(m), [0, 2, 5], input)
-        estimated = finite_difference_new(input, threshold, m)
-        self.assertCountEqual(estimated, expected)
-            
-
-    
-    

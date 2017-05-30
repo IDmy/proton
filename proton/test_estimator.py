@@ -7,7 +7,7 @@ from proton.optimizer import LPOptimizer
 # Plotting code should either go to the data exploration notebook or into a dedicated file/module
 if __name__ == "__main__":
     # Read data
-    data = pd.read_csv('../data/PayoffMatrix.txt', delim_whitespace=True, header=None)
+    data = pd.read_csv('data/PayoffMatrix.txt', delim_whitespace=True, header=None)
     benefit = data.values
 
     ah = AccuracyHandler(benefit, range(2, 7))
