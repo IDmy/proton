@@ -2,8 +2,9 @@ import random
 import unittest
 
 import numpy as np
+import pandas as pd
 
-from proton.optimizer import LPOptimizer, HeuristicOptimizer
+from proton.optimizer import LPOptimizer, HeuristicOptimizer, SmartOptimizer
 
 
 class ModelingTest(unittest.TestCase):
@@ -12,6 +13,13 @@ class ModelingTest(unittest.TestCase):
 
     def mock_BED_data(self):
         BED = np.array([[1, 10, 11], [1, 2, 3], [9, 10, 11]])
+        max_fractions = BED.shape[1] - 1
+        return BED, max_fractions
+
+    def sample_BED_data(self):
+        # Sample dataset read from file featuring 17 patients who can receive a maximum of 15 fractions
+        data = pd.read_csv('data/PayoffMatrix.txt', delim_whitespace=True, header=None)
+        BED = data.values
         max_fractions = BED.shape[1] - 1
         return BED, max_fractions
 
@@ -53,12 +61,29 @@ class ModelingTest(unittest.TestCase):
         self.finite_capacity_test(optimizer)
 
     def test_accesses(self):
-        optimizer = HeuristicOptimizer()
         BED, max_fractions = self.mock_BED_data()
-        num_patients = BED.shape[0]
         capacity = 4
-        optimizer.build(BED, capacity = capacity)
+        optimizer = HeuristicOptimizer().build(BED, capacity = capacity)
+        num_patients = BED.shape[0]
         self.assertEqual(optimizer.get_accesses(), capacity + num_patients)
+
+    def test_smart_optimizer_selection(self):
+        BED, _ = self.sample_BED_data()
+        opt = SmartOptimizer().build(BED, capacity = 100, max_time = 585)
+        self.assertEqual(opt.get_type(), "Heuristic", msg="Given enough time heuristic should be chosen")
+        opt = SmartOptimizer().build(BED, capacity = 100, max_time = 300)
+        self.assertEqual(opt.get_type(), "Linear", msg="With limited time LP with estimation should be chosen")
+
+    def test_optimizers_agree(self):
+        # Under the concavity assumption both optimizers should produce the global optimum
+        BED, max_fractions = self.mock_BED_data()
+        lp = LPOptimizer()
+        heur = HeuristicOptimizer()
+
+        lp.build(BED, capacity = 5)
+        heur.build(BED, capacity = 5)
+        self.assertEqual(lp.get_optimum(), heur.get_optimum())
+
 
     def tearDown(self):
         """Delete all models."""
