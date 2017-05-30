@@ -1,12 +1,8 @@
-import numpy as np
-import matplotlib.pyplot as plt
 from proton.estimator import *
+from matplotlib import pyplot as plt
 
 class AccuracyHandler(object):
     """AccuracyHandler handles evaluating of LP model using different BED matrixes."""
-
-    # from .optimizer import LPOptimizer
-
     def __init__(self, actual_BED, gran_range):
         self.actual_BED = actual_BED
         self.gran_range = gran_range
@@ -61,7 +57,7 @@ class AccuracyHandler(object):
         """
         return {i: (upper_bounds[i] - lower_bounds[i]) * 100 / lower_bounds[i] for i in self.gran_range}
 
-    def draw_evaluation_plot(self, optimizer):
+    def draw_evaluation_plot(self, optimizer, verbose = False):
         """Draws a plot of granularity with a relationship to different estimators"""
         linear_predictor = LinearBEDPredictor(self.actual_BED)
         low_bound_lin_internp = self.get_predictor_solution(linear_predictor, optimizer)
@@ -75,21 +71,29 @@ class AccuracyHandler(object):
         avg_BED = self.get_naive_solution(optimizer)
         optimal_BED = self.get_true_solution(optimizer)
 
-        x_li, y_li = self._get_coords(low_bound_lin_internp)
-        plt.plot(x_li, y_li, label="interpolated estimation")
+        iterative_point_predictor = BED_estimate(self.actual_BED)
+        iterative_point_estimate = self.get_predictor_solution(iterative_point_predictor, optimizer)
 
-        x_wn, y_wn = self._get_coords(upper_bound_naive_solution)
-        plt.plot(x_wn, y_wn, label="upper bound naive")
+        x_li, y_li = self._get_coords(low_bound_lin_internp)
+        plt.plot(x_li, y_li, label="Interpolated Estimation")
+
+        if verbose:
+            x_it, y_it = self._get_coords(iterative_point_estimate)
+            plt.plot(x_it, y_it, label="iterative point estimation")
+
+            x_wn, y_wn = self._get_coords(upper_bound_naive_solution)
+            plt.plot(x_wn, y_wn, label="upper bound naive")
 
         x_uc, y_uc = self._get_coords(upper_bound_correct_solution)
-        plt.plot(x_uc, y_uc, label="upper bound correct")
+        plt.plot(x_uc, y_uc, label="Upper Bound")
 
         gran_range = tuple(self.gran_range)
         # Plot naive estimation results
-        plt.plot((1,) + gran_range, [avg_BED] * (len(gran_range) + 1), label="naive estimation", linestyle='dashed')
+        if verbose:
+            plt.plot((1,) + gran_range, [avg_BED] * (len(gran_range) + 1), label="naive estimation", linestyle='dashed')
 
         # Plot actual optimum
-        plt.plot((1,) + gran_range, [optimal_BED] * (len(gran_range) + 1), label="actual BED")
+        plt.plot((1,) + gran_range, [optimal_BED] * (len(gran_range) + 1), label="Actual Optimum")
 
         # Edit plot
         plt.xlim(1, len(gran_range))
