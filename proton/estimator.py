@@ -53,8 +53,8 @@ class LinearBEDPredictor(object):
         """
         Check some points in regural intervals and linearly interpolate the rest.
 
-        @param granurality: number of actual measurements to check
-        @return estimate, cost: estimated BED matrix, time cost in seconds to compute it
+        @:param granurality: number of actual measurements to check
+        @:return estimate, cost: estimated BED matrix, time cost in seconds to compute it
         """
         if (granularity <= 1 or granularity > (self.max_fractions_per_patient - 1) / 2):
             print("Granularity should be between 2 and <num_columns/2>!")
@@ -100,8 +100,8 @@ class BEDPredictorUpperBoundNaive(LinearBEDPredictor):
     def _get_first_n_estimates(self, accessed_inds):
         """Computes estimates up to the last looked-up index in BED.
         E.g. if accessed indeces [0, 8, 15], value 16 is not estimated in this step.
-        @param accessed_inds: list looked-up indexes in BED
-        returns: np.array of a shape of (number of patients, first n values)
+        @:param accessed_inds: list looked-up indexes in BED
+        @:returns: np.array of a shape of (number of patients, first n values)
         """
         # Reverse the indexes, so it is easy to insert max bounds for each value.
         # Max bound of x[i, j] = BED[i, next access value]
@@ -121,8 +121,8 @@ class BEDPredictorUpperBoundNaive(LinearBEDPredictor):
         The computation is done using assumption of concativity; the growth of last values will
         not exceed the growth of first_n_estimates[-1] - first_n_estimates[-2].
 
-        @param accessed_inds: list looked-up indexes in BED
-        returns: np.array of a shape of (number of patients, last n values)
+        @:param accessed_inds: list looked-up indexes in BED
+        @:returns: np.array of a shape of (number of patients, last n values)
         """
         last_n_est_count = self.max_fractions_per_patient - accessed_inds[-1] - 1  # how many values to ustimate
         last_n_estimates = [self._getBED(i, accessed_inds[-1]) + (self._getBED(i, accessed_inds[-1]) - \
@@ -136,8 +136,8 @@ class BEDPredictorUpperBoundNaive(LinearBEDPredictor):
         """
         Check some points in regural intervals and linearly interpolate the rest.
 
-        @param granurality: number of actual measurements to check
-        @return estimate, cost: estimated BED matrix, time cost in seconds to compute it
+        @:param granurality: number of actual measurements to check
+        @:return estimate, cost: estimated BED matrix, time cost in seconds to compute it
         """
         if (granularity <= 1 or granularity > (self.max_fractions_per_patient - 1) / 2):
             print("Granularity should be between 2 and <num_columns/2>!")
@@ -161,99 +161,122 @@ class BEDPredictorUpperBoundNaive(LinearBEDPredictor):
         BED_estimates = np.c_[first_n_estimates, last_n_estimates]  # column-concatente first and last values
         return BED_estimates
 
+class BEDPredictorUpperBoundCorrect(LinearBEDPredictor):
+    """
+    Class that helps to estimate upper bound of BED that is mathematically correct. The class assumes that BED is concave.
+    E.g. The upper bound of points in interval between 5-10 is estimated by taking lower values either
+    (1) line assembled from point 0 and 5 and (2) the line y = BED[i, 15].
+    """
 
-class AccuracyHandler(object):
-    """AccuracyHandler handles evaluating of LP model using different BED matrixes."""
-    #from .optimizer import LPOptimizer
-
-    def __init__(self, actual_BED, gran_range):
-        self.actual_BED = actual_BED
-        self.gran_range = gran_range
-
-    def get_naive_solution(self, optimizer):
-        "Outputs objective value of naive solution using avarage of BED values."
-        naive_BED = np.ones(shape=self.actual_BED.shape) * self.actual_BED.mean()
-        return self._run_model(optimizer, naive_BED)
-
-    def get_true_solution(self, optimizer):
-        "Outputs objective value of optimal solution."
-        return self._run_model(optimizer, self.actual_BED)
-
-    def get_predictor_solution(self, predictor, optimizer):
-        """Returns a dict of objective values given granularity.
-        @param predictor: Must be LinearBEDPredictor (inhereted) object.
+    def _get_line(self, coords_point1, coords_point2):
+        """Returns a lambda function that represents a linear line that goes though the given points.
+        @:param coords_points1: x, y coordinates of the first point
+        @:param coords_points2: x, y coordinates of the second point
         """
-        result = {}
-        for gran in self.gran_range:
-            # What is the optimum found using our estimation?
-            estimated = predictor.estimate(granularity=gran)
-            result[gran] = self._run_model(optimizer, estimated)
-        return result
+        x1, y1 = coords_point1
+        x2, y2 = coords_point2
 
-    def _sum_BED(self, BED, solution):
-        """Outputs the total BED of a proposed solution"""
-        total = 0
-        for i, j in solution.items():
-            total += BED[i, j]
-        return total
+        # the next two line represents equations y1 = a*x1 + b and y2 = a*x2 + b
+        eq_1 = np.array([[x1, 1], [x2, 1]]) # there is 1, because the cooeficient before b is 1
+        eq_2 = np.array([y1, y2])
+        a, b = np.linalg.solve(eq_1, eq_2)
+        return lambda x: a * x + b
 
-    def _run_model(self, optimizer, BED, capacity=100):
+    def getBED_coords_bounds(self, i, point_ind_coords, accessed_inds):
+        """Returns BED value of a patient i and corresponding number of fractions.
+        If the given number of fractions (represented by accessed_inds[point_ind_coords]) is out of bound, the function
+        returns BED[i, accessed_inds[-1]] and accessed_inds[-1] + 1. This is done to assemble a line that represents
+        a upper bound for the last interpolated line.
+
+        @:param i: patient index
+        @:param point_ind_coords: index in accessed_inds for which the coords should be computed
+        @:param accessed_inds: list of indexes that are accessed in BED.
+        @:param line_zero: True if the first line for the first interpolated upper bound is being computed
+
+        @:return (BED value of patient i, number of fractions)
         """
-        Run a LP model and get the solution given a BED matrix. Be VERY careful here,
-        the ESTIMATED BED should be used to create and solve the model but the
-        ACTUAL BED should be used when evaluating the quality of the solution!
+        if point_ind_coords == -1:
+            # return a point that assembles a line with the point of fractions = 0, which has a slope as big, that this is line is
+            # only smaller than the line from x = [accessed_ind[1], accessed[2]].
+            x_coord = 0.001 # this needs to abitrary smaller than zero.
+            return x_coord, self._getBED(i, accessed_inds[1])
+        elif point_ind_coords >= len(accessed_inds):
+            return accessed_inds[-1] + 1, self._getBED(i, accessed_inds[-1]) # this should return 15 + 1, BED[i, 15] if 15 is the max_number_fraction
+        else:
+            return accessed_inds[point_ind_coords], self._getBED(i, accessed_inds[point_ind_coords]) #otherwise return regular BED value
+
+    def _get_intern_vals(self, accessed_inds, line_ind):
+            """Computes interpolation values for points for a given line. There is always n-1 lines to be interpolated given n points to be looked-up.
+
+            @:param accessed_inds: list looked-up indexes in BED
+            @:param line_ind: index of a line to be interpolated.
+            returns: np.array of a shape of (number of patients, values of BED between on the line)
+            """
+            if line_ind + 2 <= len(accessed_inds) and line_ind >= 0:
+                # e.g. if line_ind = 1, than the line1 is assembled from points [0, 1] and line2 from points [2, 3].
+                # That first and the last lines have indexes out of bounds of accessed_inds. That is addressed in getBED_coords_bounds.
+                line1_point1_ind = line_ind - 1
+                line1_point2_ind = line_ind
+
+                line2_point1_ind = line_ind + 1
+                line2_point2_ind = line_ind + 2
+            else:
+                raise ValueError("Index of the line to be interpolated exceeded is out of range.")
+
+            # coords of the first line
+            coords_lines1_point1 = [self.getBED_coords_bounds(i, line1_point1_ind, accessed_inds) for i in range(self.num_patients)]
+            coords_lines1_point2 = [self.getBED_coords_bounds(i, line1_point2_ind, accessed_inds) for i in range(self.num_patients)]
+
+            #coords of the second line
+            coords_lines2_point1 = [self.getBED_coords_bounds(i, line2_point1_ind, accessed_inds) for i in range(self.num_patients)]
+            coords_lines2_point2 = [self.getBED_coords_bounds(i, line2_point2_ind, accessed_inds) for i in range(self.num_patients)]
+
+            intern_lines1 = [self._get_line(coords_lines1_point1[i], coords_lines1_point2[i]) for i in range(self.num_patients)]
+            intern_lines2 = [self._get_line(coords_lines2_point1[i], coords_lines2_point2[i]) for i in range(self.num_patients)]
+
+            intern_x_range = accessed_inds[line_ind + 1] - accessed_inds[line_ind]
+
+            if line_ind + 2 == len(accessed_inds): # the last line
+                intern_x_range+= 1 #to include the last point
+
+            # return a smaller value of y of line1 and line2 given a coord x
+            intern_vals = [intern_lines1[i](x) if intern_lines1[i](x) < intern_lines2[i](x) else intern_lines2[i](x) for i in
+                range(self.num_patients) for x in range(accessed_inds[line_ind], accessed_inds[line_ind] + intern_x_range)]
+            intern_vals = np.reshape(intern_vals, (self.num_patients, intern_x_range))  # reshape into matrix
+            return intern_vals
+
+    def estimate(self, granularity):
         """
-        optimizer.build(BED, capacity=capacity)
-        solution = optimizer.get_optimum()
-        return self._sum_BED(BED, solution)
+        Check some points in regural intervals and linearly interpolate the rest.
 
-    def _get_coords(self, estimates):
-        """Returns x, y coords given a lits of tuples of coords."""
-        coords = sorted(estimates.items())
-        x, y = zip(*coords)  # unpack a list of pairs into two tuples
-        return x, y
-
-    def get_bound_error(self, lower_bounds, upper_bounds):
-        """Computes percentage difference between lower and upper bounds
-        @param lower_bounds, upper_bounds: is a dict like {granularity:objective function - BED}
-        returns: a dict that looks like {granularity:pertance_difference}
+        @:param granurality: number of actual measurements to check
+        @:return estimate, cost: estimated BED matrix, time cost in seconds to compute it
         """
-        return {i: (upper_bounds[i] - lower_bounds[i]) * 100 / lower_bounds[i] for i in self.gran_range}
+        if (granularity <= 1 or granularity > (self.max_fractions_per_patient - 1) / 2):
+            print("Granularity should be between 2 and <num_columns/2>!")
+            return None
 
-    def draw_evaluation_plot(self, optimizer):
-        """Draws a plot of granularity with a relationship to different estimators"""
-        linear_predictor = LinearBEDPredictor(self.actual_BED)
-        low_bound_lin_internp = self.get_predictor_solution(linear_predictor, optimizer)
+        self.access_counter = 0
+        self._accessed = set()
 
-        optimistic_predictor = BEDPredictorUpperBoundNaive(self.actual_BED)
-        upper_bound_naive = self.get_predictor_solution(optimistic_predictor, optimizer)
+        interp_step = (self.max_fractions_per_patient - 1) / (granularity - 1)  # take out -1
 
-        avg_BED = self.get_naive_solution(optimizer)
-        optimal_BED = self.get_true_solution(optimizer)
+        # Which indices will and will not be access in BED look-ups
+        accessed_inds = [int(i * interp_step) for i in range(granularity)]
 
-        x_li, y_li = self._get_coords(low_bound_lin_internp)
-        plt.plot(x_li, y_li, label="interpolated estimation")
+        if 0 not in accessed_inds:
+            raise ValueError(
+                "The values to bed access in BED does not contain index 0. Estimation of BED will not work correctly.")
 
-        x_wn, y_wn = self._get_coords(upper_bound_naive)
-        plt.plot(x_wn, y_wn, label="upper bound case")
+        BED_estimates = np.zeros(shape = (self.num_patients, self.max_fractions_per_patient))
+        last_ind = 0 # the last updated index in BED_estimates matrix
+        for line_ind in range(len(accessed_inds) - 1):
+            line_estimates = self._get_intern_vals(accessed_inds, line_ind)
+            column_inds = range(last_ind, last_ind + line_estimates.shape[1])
+            BED_estimates[ : , column_inds] = line_estimates
+            last_ind+= line_estimates.shape[1]
+        return BED_estimates
 
-        gran_range = tuple(self.gran_range)
-        # Plot naive estimation results
-        plt.plot((1,) + gran_range, [avg_BED] * (len(gran_range) + 1), label="naive estimation", linestyle='dashed')
-
-        # Plot actual optimum
-        plt.plot((1,) + gran_range, [optimal_BED] * (len(gran_range) + 1), label="actual BED")
-
-        # Edit plot
-        plt.xlim(1, len(gran_range))
-        plt.legend(loc='lower right')
-        plt.title('Accuracy')
-        plt.xlabel('points observed')
-        plt.ylabel('BED')
-        plt.xticks(gran_range)
-        plt.show()
-        
-        
 #An alternative approach to comput the BED matrix
 
 from itertools import zip_longest
@@ -384,5 +407,4 @@ class EstimatorTest(unittest.TestCase):
         self.assertCountEqual(estimated, expected)
             
 
-    
     

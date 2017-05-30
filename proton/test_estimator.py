@@ -1,9 +1,9 @@
 import pandas as pd
 
-from proton.estimator import AccuracyHandler, LinearBEDPredictor, BEDPredictorUpperBoundNaive
+from proton.estimator import LinearBEDPredictor, BEDPredictorUpperBoundNaive, BEDPredictorUpperBoundCorrect
 from proton.optimizer import LPOptimizer
+from proton.accuracy_handler import AccuracyHandler
 
-# ToDo:
 # Plotting code should either go to the data exploration notebook or into a dedicated file/module
 if __name__ == "__main__":
     # Read data
@@ -15,6 +15,7 @@ if __name__ == "__main__":
     optimizer = LPOptimizer()
     ah.draw_evaluation_plot(optimizer)
     lower_bound = ah.get_predictor_solution(LinearBEDPredictor(benefit), optimizer)
-    upper_bound = ah.get_predictor_solution(BEDPredictorUpperBoundNaive(benefit), optimizer)
-
-    print("The maximum error between lower and upper bound is ", ah.get_bound_error(lower_bound, upper_bound))
+    upper_bound_naive = ah.get_predictor_solution(BEDPredictorUpperBoundNaive(benefit), optimizer)
+    upper_bound_correct = ah.get_predictor_solution(BEDPredictorUpperBoundCorrect(benefit), optimizer)
+    print("The maximum error between lower and naive upper bound is ", ah.get_bound_error(lower_bound, upper_bound_naive))
+    print("The maximum error between lower and correct upper bound is ", ah.get_bound_error(lower_bound, upper_bound_correct))
