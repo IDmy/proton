@@ -12,6 +12,9 @@ from bokeh.layouts import layout, row, column, widgetbox
 
 from random import randint
 
+from optimizer import *
+
+
 # create widgets
 button = Button(label = 'Calculate')
 

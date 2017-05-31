@@ -1,5 +1,5 @@
 import unittest
-from proton.estimator import BEDPredictorUpperBoundCorrect
+from estimator import BEDPredictorUpperBoundCorrect
 import numpy as np
 
 class BEDPredictorUpperBoundCorrectTest(unittest.TestCase):

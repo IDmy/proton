@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from proton.optimizer import LPOptimizer, HeuristicOptimizer, SmartOptimizer
+from optimizer import LPOptimizer, HeuristicOptimizer, SmartOptimizer
 
 
 class ModelingTest(unittest.TestCase):

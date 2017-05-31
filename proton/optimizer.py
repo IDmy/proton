@@ -5,7 +5,7 @@ from gurobipy import *
 import numpy as np
 import math
 
-from proton.estimator import LinearBEDPredictor
+from estimator import LinearBEDPredictor
 
 # Can be overriden as a builder argument
 TIME_PER_ACCESS = 5

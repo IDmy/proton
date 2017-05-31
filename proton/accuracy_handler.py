@@ -1,4 +1,4 @@
-from proton.estimator import *
+from estimator import *
 from matplotlib import pyplot as plt
 
 class AccuracyHandler(object):
