@@ -81,7 +81,7 @@ class SmartOptimizer(ProtonOptimizer):
     def get_optimum(self):
         if not self.optimizer:
             raise ValueError("no optimizer has been selected")
-        self.optimizer.get_optimum()
+        return self.optimizer.get_optimum()
 
     def get_type(self):
         return self.optimizer.get_type()
