@@ -54,7 +54,7 @@ class SmartOptimizer(ProtonOptimizer):
         self.optimizer = None
         super(SmartOptimizer, self).__init__()
 
-    def build(self, BED, capacity=100, max_time=None, model_name='smart_optimizer', time_per_access = TIME_PER_ACCESS):
+    def build(self, BED, capacity=100, max_time=None, model_name='smart_optimizer', time_per_access = TIME_PER_ACCESS, force_linear = False):
         """
         Given the maximum runtime allowed (in minutes), this function will return the
         best underlying optimizer.
@@ -64,18 +64,21 @@ class SmartOptimizer(ProtonOptimizer):
             # If max_time is not passed we assume no limitation
             max_accesses = num_patients * max_fractions
         else:
-            max_accesses = math.floor(max_time / TIME_PER_ACCESS)
+            max_accesses = math.floor(max_time / TIME_PER_ACCESS) # number of look-ups
 
+        max_capacity_needed = num_patients * max_fractions
+        capacity =  max_capacity_needed if max_capacity_needed < capacity else capacity
 
         heuristic_accesses = num_patients + capacity
-        if heuristic_accesses <= max_accesses:
+        if heuristic_accesses <= max_accesses and not force_linear:
             self.optimizer = HeuristicOptimizer().build(BED, capacity)
             return self
+        else:
 
-        # If we are short on time we need to use the LP model with an estimated BED matrix.
-        granurality = math.floor(max_accesses / num_patients)
-        estimated_BED = LinearBEDPredictor(BED).estimate(granurality)
-        self.optimizer = LPOptimizer().build(estimated_BED, capacity)
+            # If we are short on time we need to use the LP model with an estimated BED matrix.
+            granurality = math.floor(max_accesses / num_patients)
+            estimated_BED = LinearBEDPredictor(BED).estimate(granurality)
+            self.optimizer = LPOptimizer().build(estimated_BED, capacity)
         return self
 
     def get_optimum(self):

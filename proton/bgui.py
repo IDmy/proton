@@ -22,9 +22,10 @@ import pandas as pd
 import os
 
 #Download data
-df = pd.read_csv('proton/data/PayoffMatrix.txt', delim_whitespace=True, header=None)
+df = pd.read_csv('data/PayoffMatrix.txt', delim_whitespace=True, header=None)
 BED = df.values
-
+number_of_patients = BED.shape[0]
+min_LP_time = math.ceil(number_of_patients/6) # 12 * t[hrs] >= 2 *number_of_patients --> t >= number_of_patients/6
 # Titles of paragraphs
 p = Div(text="""<font size="+1", color="#0c701c", face="Times New Roman"><b></b></font>""", width=1, height=1)
 p0 = Div(text="""<div style="background-color:#00b33c;color:white;padding:20px;"><span><center><font size="+5", color="#ffffff", face="Times New Roman"><b>Allocation of proton radiotherapy over patients </b></font></center></span></div>""", width=1350, height=90)
@@ -37,7 +38,7 @@ RadioButton_title = Div(text="""<font size="-0.5">Select the type of model: </fo
 #Widgets
 RadioButton = RadioButtonGroup(labels=["Linear", "Heuristic", "Automatic"], active=2)
 capacity = TextInput(value = "100", title="Set the capacity:")
-time = Slider(start=0, end=20, value=1, step=1, title = "Set the time for calculation in hours")
+time = Slider(start = min_LP_time, end=20, value=min_LP_time, step=1, title = "Set the time for calculation in hours")
 calculation_button = Button(label = 'Calculate', button_type="success")
 
 # Initialization of table object
@@ -67,7 +68,7 @@ def show_table():
     t = time.value
     c = int(capacity.value)
     if RadioButton.active == 0:
-        opt = LPOptimizer.build(BED, capacity = c)
+        opt = SmartOptimizer().build(BED, capacity=c, max_time=t * 60, force_linear = True)
     elif RadioButton.active == 1:
         opt = HeuristicOptimizer().build(BED, capacity = c)
     else:
@@ -92,4 +93,4 @@ title = p0
 inputs = widgetbox(p1, RadioButton_title, RadioButton, capacity, time, calculation_button, width=550, height=550)
 table = widgetbox(p2, results_table, width=700, height=500)
 l(p0, inputs, table)
-os.system('bokeh serve --show proton/bgui.py')
+os.system('bokeh serve --show bgui.py')
