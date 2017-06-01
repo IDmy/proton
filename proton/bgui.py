@@ -4,6 +4,11 @@ Created on Mon May 29 15:14:59 2017
 
 @author: DIhnatov
 """
+
+#============================Limitations========================================
+'''PROBLEMS: the lower bound of widget time is not changing with capacity.
+   EXAMPLE: if we have capacity 200 and minimum time for calculation is 3 hour, then if the user will set 2 hour the program will not calculate the result '''
+
 # Import
 from bokeh.io import curdoc
 from bokeh.models import ColumnDataSource
@@ -13,97 +18,78 @@ from bokeh.layouts import layout, row, column, widgetbox
 from random import randint
 
 from optimizer import *
+import pandas as pd
+import os
 
-
-# create widgets
-button = Button(label = 'Calculate')
+#Download data
+df = pd.read_csv('proton/data/PayoffMatrix.txt', delim_whitespace=True, header=None)
+BED = df.values
 
 # Titles of paragraphs
 p = Div(text="""<font size="+1", color="#0c701c", face="Times New Roman"><b></b></font>""", width=1, height=1)
-p0 = Div(text="""<font size="+5", color="#0c701c", face="Times New Roman"><b>Allocation of proton radiotherapy over patients </b></font>""", width=1300, height=50)
-p1 = Div(text="""<font size="+3", color="#154696"><b>Settings: </b></font>""", width=600, height=30)
-p2 = Div(text="""<font size="+3", color="#154696"><b>Results: </b></font>""", width=600, height=30)
+p0 = Div(text="""<div style="background-color:#00b33c;color:white;padding:20px;"><span><center><font size="+5", color="#ffffff", face="Times New Roman"><b>Allocation of proton radiotherapy over patients </b></font></center></span></div>""", width=1350, height=90)
+p1 = Div(text="""<font size="+3", color="#154696"><b>Settings: </b></font>""", width=600, height=40)
+p2 = Div(text="""<font size="+3", color="#154696"><b>Results: </b></font>""", width=600, height=50)
 
 # Titles of widgets
-RadioButton_title = Div(text="""<font size="-1">Select the type of model: </font>""", width=600, height=20)
-#capacity_title = Div(text="""<font size="+0">Set the capacity: </font>""", width=300, height=20)
-#slider1_title = Div(text="""<font size="+0">Set the number of points for interpolation: </font>""", width=300, height=20)
-#slider2_title = Div(text="""<font size="+0">Set the time for calculation: </font>""", width=300, height=20)
-#slider3_title = Div(text="""<font size="+0">Set the accuracy: </font>""", width=300, height=20)
-
-
+RadioButton_title = Div(text="""<font size="-0.5">Select the type of model: </font>""", width=600, height=15)
 
 #Widgets
-RadioButton = RadioButtonGroup(labels=["Linear", "Heuristic", "Automatic"])
+RadioButton = RadioButtonGroup(labels=["Linear", "Heuristic", "Automatic"], active=2)
+capacity = TextInput(value = "100", title="Set the capacity:")
+time = Slider(start=0, end=20, value=1, step=1, title = "Set the time for calculation in hours")
+calculation_button = Button(label = 'Calculate', button_type="success")
 
+# Initialization of table object
+data = dict(patients=[],
+            fractions=[])
+source = ColumnDataSource(data)
+columns = [TableColumn(field="patients", title="Patient ID"),
+           TableColumn(field="fractions", title="Number of fractions")]
+results_table = DataTable(source=source, columns=columns, width=700, height=550)
 
-capacity = TextInput(value = '100', title="Set the capacity:")
-#slider1 = Slider(start=0, end=10, value=1, step=1, title = "Set the granularity")
-time = Slider(start=0, end=10, value=1, step=1, title = "Set the time for calculation")
-#slider3 = Slider(start=0, end=10, value=1, step=1, title = "Set the accuracy")
-
-button = Button(label = 'Calculate', button_type="success")
-
-
-table = p
-inputs = widgetbox(p1, RadioButton_title, RadioButton, capacity, time, button, width=550, height=550)
+#============================FUNCTIONS==========================================
 #Model selection
 def model_selection(attr, old, new):
     if RadioButton.active == 1:
         time.title = "1"
         time.end = 1
         time.step=2
+        time.value=0
     else:
         time.title = 'Set the time for calculation'
         time.end = 10
         time.step=1
-#function that can run optimization
-#def calculate():
-#        output.text = 'Hello, ' + text_input.value
-
-#button.on_click(calculate)
+        time.value=1
 
 # Table with results
 def show_table():
     t = time.value
-    c = capacity.value
-#    r = RadioButton.value
+    c = int(capacity.value)
+    if RadioButton.active == 0:
+        opt = LPOptimizer.build(BED, capacity = c)
+    elif RadioButton.active == 1:
+        opt = HeuristicOptimizer().build(BED, capacity = c)
+    else:
+        opt = SmartOptimizer().build(BED, capacity = c, max_time = t*60)
 
-    data = dict(patients=[randint(0, 100) for i in range(100)],
-                fractions=[randint(0, 100) for i in range(100)])
+    output = opt.get_optimum()
+    results = dict(patients=list(output.keys()),
+                fractions=list(output.values()))
+    source.data = results
 
-    source = ColumnDataSource(data)
-
-    columns = [TableColumn(field="patients", title="Patient ID"),
-               TableColumn(field="fractions", title="Number of fractions")]
-
-    results_table = DataTable(source=source, columns=columns, width=700, height=550)
-    table_r = widgetbox(p2, results_table, width=700, height=500)
-    p = table_r
-#    source.data = dict(x=x, y=y)
-
+# Visualization function
 def l(p0, inputs, table):
-#    column(p0,row(inputs, table, width = 1200))
     curdoc().add_root(column(p0,row(inputs, table, width = 1200)))
 
-
+#Interactions
 RadioButton.on_change("active", model_selection)
-button.on_click(show_table)
-#lay_out = layout([[p0],
-#                [p1],
-#                [RadioButton_title, RadioButton],
-#                [capacity_title, capacity],
-#                [slider1_title, slider1],
-#                [slider2_title, slider2],
-#                [slider3_title, slider3],
-#                [button],
-#                [p2],
-#                [results_table]])
+calculation_button.on_click(show_table)
+#===============================================================================
 
-#, sizing_mode="scale_both"
-#curdoc().add_root(lay_out)
-
+# Webpage visualization
 title = p0
+inputs = widgetbox(p1, RadioButton_title, RadioButton, capacity, time, calculation_button, width=550, height=550)
+table = widgetbox(p2, results_table, width=700, height=500)
 l(p0, inputs, table)
-
-#curdoc().add_root(l(p0, inputs, table))
+os.system('bokeh serve --show proton/bgui.py')
