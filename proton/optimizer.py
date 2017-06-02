@@ -72,9 +72,7 @@ class SmartOptimizer(ProtonOptimizer):
         heuristic_accesses = num_patients + capacity
         if heuristic_accesses <= max_accesses and not force_linear:
             self.optimizer = HeuristicOptimizer().build(BED, capacity)
-            return self
         else:
-
             # If we are short on time we need to use the LP model with an estimated BED matrix.
             granurality = math.floor(max_accesses / num_patients)
             estimated_BED = LinearBEDPredictor(BED).estimate(granurality)

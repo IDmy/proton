@@ -21,11 +21,15 @@ from optimizer import *
 import pandas as pd
 import os
 
+
 #Download data
 df = pd.read_csv('data/PayoffMatrix.txt', delim_whitespace=True, header=None)
 BED = df.values
-number_of_patients = BED.shape[0]
-min_LP_time = math.ceil(number_of_patients/6) # 12 * t[hrs] >= 2 *number_of_patients --> t >= number_of_patients/6
+#constants
+NUM_PATIENTS = BED.shape[0]
+MIN_LP_TIME = math.ceil(NUM_PATIENTS / 6) # 12 * t[hrs] >= 2 *number_of_patients --> t >= number_of_patients/6
+
+
 # Titles of paragraphs
 p = Div(text="""<font size="+1", color="#0c701c", face="Times New Roman"><b></b></font>""", width=1, height=1)
 p0 = Div(text="""<div style="background-color:#00b33c;color:white;padding:20px;"><span><center><font size="+5", color="#ffffff", face="Times New Roman"><b>Allocation of proton radiotherapy over patients </b></font></center></span></div>""", width=1350, height=90)
@@ -35,10 +39,16 @@ p2 = Div(text="""<font size="+3", color="#154696"><b>Results: </b></font>""", wi
 # Titles of widgets
 RadioButton_title = Div(text="""<font size="-0.5">Select the type of model: </font>""", width=600, height=15)
 
+
+
+
 #Widgets
 RadioButton = RadioButtonGroup(labels=["Linear", "Heuristic", "Automatic"], active=2)
 capacity = TextInput(value = "100", title="Set the capacity:")
-time = Slider(start = min_LP_time, end=20, value=min_LP_time, step=1, title = "Set the time for calculation in hours")
+
+heur_time = int(capacity.value) + NUM_PATIENTS
+min_time = heur_time if heur_time < MIN_LP_TIME else MIN_LP_TIME
+time = Slider(start = min_time, end=20, value = min_time, step=1, title ="Set the time for calculation in hours")
 calculation_button = Button(label = 'Calculate', button_type="success")
 
 # Initialization of table object
@@ -52,16 +62,23 @@ results_table = DataTable(source=source, columns=columns, width=700, height=550)
 #============================FUNCTIONS==========================================
 #Model selection
 def model_selection(attr, old, new):
-    if RadioButton.active == 1:
+    if RadioButton.active == 1: #Heuristic
         time.title = "1"
         time.end = 1
-        time.step=2
-        time.value=0
+        time.step = 2
+        time.value = MIN_LP_TIME
+    elif RadioButton.active == 0:
+        time.title = 'Set the time for calculation'
+        time.end = 10
+        time.step = 1
+        time.value = MIN_LP_TIME
     else:
         time.title = 'Set the time for calculation'
         time.end = 10
-        time.step=1
-        time.value=1
+        time.step = 1
+        heur_time = int(capacity.value) + NUM_PATIENTS
+        time.start = time.value = heur_time if heur_time < MIN_LP_TIME else MIN_LP_TIME
+
 
 # Table with results
 def show_table():
@@ -73,7 +90,6 @@ def show_table():
         opt = HeuristicOptimizer().build(BED, capacity = c)
     else:
         opt = SmartOptimizer().build(BED, capacity = c, max_time = t*60)
-
     output = opt.get_optimum()
     results = dict(patients=list(output.keys()),
                 fractions=list(output.values()))
