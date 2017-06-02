@@ -5,7 +5,7 @@ from gurobipy import *
 import numpy as np
 import math
 
-from estimator import LinearBEDPredictor
+from estimator import LinearBEDPredictor, BEDPredictorUpperBoundCorrect
 
 # Can be overriden as a builder argument
 TIME_PER_ACCESS = 5
@@ -40,7 +40,10 @@ class ProtonOptimizer(object):
     def get_total_BED(self):
         total = 0
         for patient, fractions in self.get_optimum().items():
+            #print(patient, fractions)
             total += self.BED[patient, fractions]
+
+        print(total)
         return total
 
 class SmartOptimizer(ProtonOptimizer):
@@ -59,6 +62,7 @@ class SmartOptimizer(ProtonOptimizer):
         Given the maximum runtime allowed (in minutes), this function will return the
         best underlying optimizer.
         """
+        self.BED = BED
         num_patients, max_fractions = BED.shape
         if not max_time:
             # If max_time is not passed we assume no limitation
@@ -77,7 +81,31 @@ class SmartOptimizer(ProtonOptimizer):
             granurality = math.floor(max_accesses / num_patients)
             estimated_BED = LinearBEDPredictor(BED).estimate(granurality)
             self.optimizer = LPOptimizer().build(estimated_BED, capacity)
+            self._compute_confidence(granurality, BED, capacity)
         return self
+
+    def get_confidence_rate(self):
+        if self._confidence_rate is not None:
+            return self._confidence_rate
+        return 0
+
+    def _compute_confidence(self, granularity, BED, capacity):
+
+        BED_max = BEDPredictorUpperBoundCorrect(BED).estimate(granularity=granularity)
+        upper_bound_optimizer = LPOptimizer().build(BED_max, capacity)
+        upper_bound_optimizer.build(BED_max, capacity=capacity)
+        print("test")
+        #upper_bound_optimizer.get_optimum()
+        upper_bound_obj = upper_bound_optimizer.get_total_BED()
+        print(upper_bound_obj, "upper")
+
+        #self.get_optimum()
+        lower_bound_obj = self.get_total_BED()
+        print(lower_bound_obj, "lower")
+
+        confidence_rate = (upper_bound_obj - lower_bound_obj) / lower_bound_obj * 100
+        print(confidence_rate)
+        self._confidence_rate = confidence_rate
 
     def get_optimum(self):
         if not self.optimizer:

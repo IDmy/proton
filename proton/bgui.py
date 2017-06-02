@@ -14,10 +14,11 @@ from bokeh.io import curdoc
 from bokeh.models import ColumnDataSource
 from bokeh.models.widgets import TextInput, Button, Paragraph, Div, RadioButtonGroup, Slider, DataTable, DateFormatter, TableColumn
 from bokeh.layouts import layout, row, column, widgetbox
-
+from bokeh.models.callbacks import CustomJS
 from random import randint
 
 from optimizer import *
+from estimator import BEDPredictorUpperBoundCorrect
 import pandas as pd
 import os
 
@@ -28,19 +29,16 @@ BED = df.values
 #constants
 NUM_PATIENTS = BED.shape[0]
 MIN_LP_TIME = math.ceil(NUM_PATIENTS / 6) # 12 * t[hrs] >= 2 *number_of_patients --> t >= number_of_patients/6
-
+confidence_rate = 0
 
 # Titles of paragraphs
-p = Div(text="""<font size="+1", color="#0c701c", face="Times New Roman"><b></b></font>""", width=1, height=1)
 p0 = Div(text="""<div style="background-color:#00b33c;color:white;padding:20px;"><span><center><font size="+5", color="#ffffff", face="Times New Roman"><b>Allocation of proton radiotherapy over patients </b></font></center></span></div>""", width=1350, height=90)
 p1 = Div(text="""<font size="+3", color="#154696"><b>Settings: </b></font>""", width=600, height=40)
 p2 = Div(text="""<font size="+3", color="#154696"><b>Results: </b></font>""", width=600, height=50)
+confidence = Paragraph()
 
 # Titles of widgets
 RadioButton_title = Div(text="""<font size="-0.5">Select the type of model: </font>""", width=600, height=15)
-
-
-
 
 #Widgets
 RadioButton = RadioButtonGroup(labels=["Linear", "Heuristic", "Automatic"], active=2)
@@ -57,7 +55,7 @@ data = dict(patients=[],
 source = ColumnDataSource(data)
 columns = [TableColumn(field="patients", title="Patient ID"),
            TableColumn(field="fractions", title="Number of fractions")]
-results_table = DataTable(source=source, columns=columns, width=700, height=550)
+results_table = DataTable(source=source, columns=columns, width=700, height=450)
 
 #============================FUNCTIONS==========================================
 #Model selection
@@ -79,6 +77,11 @@ def model_selection(attr, old, new):
         heur_time = int(capacity.value) + NUM_PATIENTS
         time.start = time.value = heur_time if heur_time < MIN_LP_TIME else MIN_LP_TIME
 
+def get_obj_val(solution, BED):
+    total = 0
+    for i, j in solution.items():
+        total += BED[i, j]
+    return total
 
 # Table with results
 def show_table():
@@ -90,10 +93,12 @@ def show_table():
         opt = HeuristicOptimizer().build(BED, capacity = c)
     else:
         opt = SmartOptimizer().build(BED, capacity = c, max_time = t*60)
+    confidence_rate = opt.get_confidence_rate()
     output = opt.get_optimum()
     results = dict(patients=list(output.keys()),
                 fractions=list(output.values()))
     source.data = results
+    confidence.text = "Confidence rate: " + str(confidence_rate)
 
 # Visualization function
 def l(p0, inputs, table):
@@ -107,6 +112,6 @@ calculation_button.on_click(show_table)
 # Webpage visualization
 title = p0
 inputs = widgetbox(p1, RadioButton_title, RadioButton, capacity, time, calculation_button, width=550, height=550)
-table = widgetbox(p2, results_table, width=700, height=500)
+table = widgetbox(p2, results_table, confidence, width=700, height=500)
 l(p0, inputs, table)
 os.system('bokeh serve --show bgui.py')
