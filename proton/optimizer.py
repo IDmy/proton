@@ -46,6 +46,11 @@ class ProtonOptimizer(object):
         print(total)
         return total
 
+    def get_maximum_capacity_needed(self):
+        """Returns the maximum (i.e., everyone would get 15 fractions) capacity needed given the BED matrix."""
+        num_patients, max_fractions = self.BED.shape
+        return num_patients * (max_fractions - 1)
+
 class SmartOptimizer(ProtonOptimizer):
     """"
     This class wraps our concrete optimizers by dynamically selecting the best one for a given job.
@@ -55,6 +60,7 @@ class SmartOptimizer(ProtonOptimizer):
     def __init__(self):
         self.optimum = {}
         self.optimizer = None
+        self._confidence_rate = None
         super(SmartOptimizer, self).__init__()
 
     def build(self, BED, capacity=100, max_time=None, model_name='smart_optimizer', time_per_access = TIME_PER_ACCESS, force_linear = False):
@@ -70,7 +76,7 @@ class SmartOptimizer(ProtonOptimizer):
         else:
             max_accesses = math.floor(max_time / TIME_PER_ACCESS) # number of look-ups
 
-        max_capacity_needed = num_patients * max_fractions
+        max_capacity_needed = self.get_maximum_capacity_needed()
         capacity =  max_capacity_needed if max_capacity_needed < capacity else capacity
 
         heuristic_accesses = num_patients + capacity
@@ -90,7 +96,6 @@ class SmartOptimizer(ProtonOptimizer):
         return 0
 
     def _compute_confidence(self, granularity, BED, capacity):
-
         BED_max = BEDPredictorUpperBoundCorrect(BED).estimate(granularity=granularity)
         upper_bound_optimizer = LPOptimizer().build(BED_max, capacity)
         upper_bound_optimizer.build(BED_max, capacity=capacity)
@@ -186,6 +191,8 @@ class HeuristicOptimizer(ProtonOptimizer):
 
     def build(self, BED, capacity=100, model_name='heuristic_optimizer'):
         self.BED = BED
+        max_capacity_needed = self.get_maximum_capacity_needed()
+        capacity = max_capacity_needed if max_capacity_needed < capacity else capacity
         self.capacity = capacity
         return self
 
@@ -202,9 +209,11 @@ class HeuristicOptimizer(ProtonOptimizer):
         benefit = self.BED[:, 1] - self.BED[:, 0]
         self.num_accesses += num_patients
 
-        for i in range(self.capacity):
+        for _ in range(self.capacity):
             patient = np.argmax(benefit)
-            value = benefit[patient]
+            if state[patient] == max_fractions_per_patient: #this occurs when data are non-concave (benefit[patient] becomes negative)
+                break
+
             state[patient] = state[patient] + 1
             if state[patient] == max_fractions_per_patient:
                 benefit[patient] = 0
