@@ -56,6 +56,7 @@ p2 = Div(text="""<font size="+2", color="#154696"><b>Results </b></font>""", wid
 confidence = Paragraph()
 
 calculation_time = Paragraph()
+number_calls = Paragraph()
 
 # Titles of widgets
 RadioButton_title = Div(text="""<font size="-0.5">Select the type of model: </font>""", width=600, height=15)
@@ -82,7 +83,7 @@ capacity_change = CustomJS(args = {'add_params' : add_params, 'time' : time, 'ra
     var sel_model = radioButton.attributes.active;
     if(sel_model == sel_model_options['auto']){ // only for Automatic Model Choice
         capacity_val = parseInt(cb_obj.value);
-        heur_time = capacity_val * 5 / 60;  // converting heur_time to hours
+        heur_time = (capacity_val + num_patients) * 5 / 60;  // converting heur_time to hours
         min_lp_time = add_params.data.min_lp_time[0];
         use_heur = heur_time < min_lp_time;
         min_time = ((use_heur) ? heur_time : min_lp_time);
@@ -129,10 +130,12 @@ def get_obj_val(solution, BED):
 def show_table():
     t = time.value
     c = int(capacity.value)
+
     if c >= NUM_PATIENTS * MAX_FRACTIONS: #if the capacity is bigger than num_patient * num_fractions, than no optimization is needed. Everyone will get MAX_FRACTIONS
         results = dict(patients=list(range(0, NUM_PATIENTS)), fractions=[MAX_FRACTIONS] * NUM_PATIENTS)
         confidence_rate = 0
         calc_time = 0
+        number_calls_text = 0
     else:
         if RadioButton.active == 0:
             opt = SmartOptimizer().build(BED, capacity=c, max_time=t * 60, force_linear = True)
@@ -153,11 +156,13 @@ def show_table():
                 calc_time  = opt.get_calculation_time()
 
         output = opt.get_optimum()
+        number_calls_text = opt.get_accesses()
         results = dict(patients=list(output.keys()),
                     fractions=list(output.values()))
     source.data = results
     confidence.text = "Error rate: " + str(format(confidence_rate, '.2f'))
     calculation_time.text = "Calculation time: " + str(format(calc_time/60, '.2f')) + " hours"
+    number_calls.text = "Number of calls to BED optimizer: " + str(number_calls_text)
 # Visualization function
 def l(p0, inputs, table):
     curdoc().add_root(column(p0,row(inputs, table, width = 1200)))
@@ -170,6 +175,6 @@ calculation_button.on_click(show_table)
 # Webpage visualization
 title = p0
 inputs = widgetbox(p1, RadioButton_title, RadioButton, capacity, time, calculation_button, width = 250)
-table = widgetbox(p2, results_table, confidence, calculation_time, height=600, width = 700)
+table = widgetbox(p2, results_table, confidence, calculation_time, number_calls, height=600, width = 700)
 l(p0, inputs, table)
 os.system('bokeh serve --show bgui.py')
