@@ -63,9 +63,8 @@ class SmartOptimizer(ProtonOptimizer):
     def __init__(self):
         self.optimum = {}
         self.optimizer = None
-        self._calculation_time = None
         self.num_lookups = None
-        self._confidence_rate = None
+        self.error_rate = None
         super(SmartOptimizer, self).__init__()
 
     def build(self, BED, capacity=100, max_time=None, model_name='smart_optimizer', time_per_access = TIME_PER_ACCESS, force_linear = False):
@@ -88,24 +87,20 @@ class SmartOptimizer(ProtonOptimizer):
         if heuristic_accesses <= max_accesses and not force_linear:
             self.optimizer = HeuristicOptimizer().build(BED, capacity)
             self.num_lookups = heuristic_accesses
+            self.error_rate = 0
         else:
             # If we are short on time we need to use the LP model with an estimated BED matrix.
             granularity = math.floor(max_accesses / num_patients)
             granularity = self.get_correct_granularity(granularity, max_fractions)
             estimated_BED = LinearBEDPredictor(BED).estimate(granularity)
             self.optimizer = LPOptimizer().build(estimated_BED, capacity)
-            print("test1")
-            self._compute_confidence(granularity, BED, capacity)
+            self._compute_error(granularity, BED, capacity)
             self.num_lookups = num_patients * granularity
-            print("test3")
-            self._compute_calculation_time(granularity, BED)
-            print("test4")
+
         return self
 
-    def get_confidence_rate(self):
-        if self._confidence_rate is not None:
-            return self._confidence_rate
-        return 0
+    def get_error_rate(self):
+        return self.error_rate
 
     def get_calculation_time(self, time_per_access = 5):
         return self.num_lookups * time_per_access
@@ -124,24 +119,13 @@ class SmartOptimizer(ProtonOptimizer):
         else:
             return granularity
 
-    def _compute_confidence(self, granularity, BED, capacity):
+    def _compute_error(self, granularity, BED, capacity):
         BED_max = BEDPredictorUpperBoundCorrect(BED).estimate(granularity=granularity)
         upper_bound_optimizer = LPOptimizer().build(BED_max, capacity)
-        upper_bound_optimizer.build(BED_max, capacity=capacity)
-        print("test")
         upper_bound_obj = upper_bound_optimizer.get_total_BED()
-        print(upper_bound_obj, "upper")
         lower_bound_obj = self.get_total_BED()
-        print(lower_bound_obj, "lower")
-        confidence_rate = (upper_bound_obj - lower_bound_obj) / lower_bound_obj * 100
-        print(confidence_rate)
-        self._confidence_rate = confidence_rate
-
-    def _compute_calculation_time(self, granularity, BED):
-        NUM_PATIENTS = BED.shape[0]
-        print ('granularity: ', granularity)
-        calculation_time = granularity*NUM_PATIENTS*5
-        self._calculation_time = calculation_time
+        error_rate = (upper_bound_obj - lower_bound_obj) / lower_bound_obj * 100
+        self.error_rate = error_rate
 
     def get_optimum(self):
         if not self.optimizer:

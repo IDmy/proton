@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon May 29 15:14:59 2017
-
-@author: DIhnatov
-"""
-
 # Import
 from bokeh.io import curdoc
 from bokeh.models import ColumnDataSource
@@ -18,9 +11,10 @@ from estimator import BEDPredictorUpperBoundCorrect
 import pandas as pd
 from decimal import *
 import os
+import math
 
 
-#Download data
+# Read data
 df = pd.read_csv('data/PayoffMatrix.txt', delim_whitespace=True, header=None)
 BED = df.values
 
@@ -29,7 +23,7 @@ NUM_PATIENTS = BED.shape[0]
 MAX_FRACTIONS = BED.shape[1] - 1
 MIN_LP_TIME = math.ceil(NUM_PATIENTS / 6) # 12 * t[hrs] >= 2 *number_of_patients --> t >= number_of_patients/6
 MAX_LP_TIME = math.ceil(NUM_PATIENTS * MAX_FRACTIONS * 5 / 60)
-confidence_rate = 0
+error_rate = 0
 
 #CSS for nice visualization of all gui elements
 css = """
@@ -57,7 +51,7 @@ body {
 p0 = Div(text="""<div style="background-color:#386994;color:white;padding:9px; font-size: 29px;border-radius: 3px;"><span><center><b>Allocation of Proton Radiotherapy over Patients </b></center></span></div>""" + css, width=1024, height=39)
 p1 = Div(text="""<font size="+2", color="#154696"><b>Settings</b></font>""", width=600, height=23)
 p2 = Div(text="""<font size="+2", color="#154696"><b>Results </b></font>""", width=600, height=33)
-confidence = Paragraph()
+error = Paragraph()
 calculation_time = Paragraph()
 
 total_BED = Paragraph()
@@ -142,24 +136,24 @@ def show_table():
     # if the capacity is bigger than num_patient * num_fractions, than no optimization is needed. Everyone will get MAX_FRACTIONS
     if c >= NUM_PATIENTS * MAX_FRACTIONS:
         results = dict(patients=list(range(0, NUM_PATIENTS)), fractions=[MAX_FRACTIONS] * NUM_PATIENTS)
-        confidence_rate = 0
+        error_rate = 0
         calc_time = 0
         number_calls_text = 0
     else:
         #Linear model case
         if RadioButton.active == 0:
             opt = SmartOptimizer().build(BED, capacity=c, max_time=t * 60, force_linear = True)
-            confidence_rate = opt.get_confidence_rate()
+            error_rate = opt.get_error_rate()
             calc_time  = opt.get_calculation_time()
         #Heuristic model case
         elif RadioButton.active == 1:
             opt = HeuristicOptimizer().build(BED, capacity = c)
-            confidence_rate = 0
+            error_rate = 0
             calc_time = opt.get_lookups()*5
         #Automatic model case
         else:
             opt = SmartOptimizer().build(BED, capacity = c, max_time = t*60)
-            confidence_rate = opt.get_confidence_rate()
+            error_rate = opt.get_error_rate()
             heur_time = c * 5 / 60  # converting heur_time to hours
             if heur_time < MIN_LP_TIME:
                 h = HeuristicOptimizer().build(BED, capacity = c)
@@ -179,7 +173,7 @@ def show_table():
     model_type.text = "Model type: " + opt.get_type()
     total_BED.text = "Total BED: " + str(format(opt.get_total_BED(), '.2f'))
     num_of_calls.text = "Number of calls: " + str(number_calls_text)
-    confidence.text = "Error rate: " + str(format(confidence_rate, '.2f'))
+    error.text = "Error rate: " + str(format(error_rate, '.2f'))
     calculation_time.text = "Calculation time: " + str(format(calc_time/60, '.2f')) + " hours"
 # Visualization function
 def l(p0, inputs, table):
@@ -195,6 +189,6 @@ calculation_button.on_click(show_table)
 # Webpage visualization
 title = p0
 inputs = widgetbox(p1, RadioButton_title, RadioButton, capacity, time, calculation_button, width = 250)
-table = widgetbox(p2, results_table, model_type, total_BED, num_of_calls, confidence, calculation_time, height=600, width = 700)
+table = widgetbox(p2, results_table, model_type, total_BED, num_of_calls, error, calculation_time, height=600, width = 700)
 l(p0, inputs, table)
 os.system('bokeh serve --show bgui.py')
