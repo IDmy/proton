@@ -40,11 +40,14 @@ class ProtonOptimizer(object):
     def get_total_BED(self):
         total = 0
         for patient, fractions in self.get_optimum().items():
-            #print(patient, fractions)
             total += self.BED[patient, fractions]
-
-        print(total)
         return total
+
+    def get_optimum_value(self):
+        optimum_value = {}
+        for patient, fractions in self.get_optimum().items():
+            optimum_value[patient] = self.BED[patient, fractions]
+        return optimum_value
 
     def get_maximum_capacity_needed(self):
         """Returns the maximum (i.e., everyone would get 15 fractions) capacity needed given the BED matrix."""
@@ -61,6 +64,7 @@ class SmartOptimizer(ProtonOptimizer):
         self.optimum = {}
         self.optimizer = None
         self._calculation_time = None
+        self.num_lookups = None
         self._confidence_rate = None
         super(SmartOptimizer, self).__init__()
 
@@ -83,12 +87,14 @@ class SmartOptimizer(ProtonOptimizer):
         heuristic_accesses = num_patients + capacity
         if heuristic_accesses <= max_accesses and not force_linear:
             self.optimizer = HeuristicOptimizer().build(BED, capacity)
+            self.num_lookups = heuristic_accesses
         else:
             # If we are short on time we need to use the LP model with an estimated BED matrix.
             granularity = math.floor(max_accesses / num_patients)
             estimated_BED = LinearBEDPredictor(BED).estimate(granularity)
             self.optimizer = LPOptimizer().build(estimated_BED, capacity)
             self._compute_confidence(granularity, BED, capacity)
+            self.num_lookups = num_patients * granularity
             self._compute_calculation_time(granularity, BED)
         return self
 
@@ -97,10 +103,11 @@ class SmartOptimizer(ProtonOptimizer):
             return self._confidence_rate
         return 0
 
-    def get_calculation_time(self):
-        if self._calculation_time is not None:
-            return self._calculation_time
-        return 0
+    def get_calculation_time(self, time_per_access = 5):
+        return self.num_lookups * time_per_access
+
+    def get_lookups(self):
+        return self.num_lookups
 
     def _compute_confidence(self, granularity, BED, capacity):
         BED_max = BEDPredictorUpperBoundCorrect(BED).estimate(granularity=granularity)
