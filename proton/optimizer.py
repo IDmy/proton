@@ -84,10 +84,11 @@ class SmartOptimizer(ProtonOptimizer):
             self.optimizer = HeuristicOptimizer().build(BED, capacity)
         else:
             # If we are short on time we need to use the LP model with an estimated BED matrix.
-            granurality = math.floor(max_accesses / num_patients)
-            estimated_BED = LinearBEDPredictor(BED).estimate(granurality)
+            granularity = math.floor(max_accesses / num_patients)
+            estimated_BED = LinearBEDPredictor(BED).estimate(granularity)
             self.optimizer = LPOptimizer().build(estimated_BED, capacity)
-            self._compute_confidence(granurality, BED, capacity)
+            self._compute_confidence(granularity, BED, capacity)
+            self._compute_calculation_time(granularity, BED)
         return self
 
     def get_confidence_rate(self):
@@ -95,22 +96,29 @@ class SmartOptimizer(ProtonOptimizer):
             return self._confidence_rate
         return 0
 
+    def get_calculation_time(self):
+        if self._calculation_time is not None:
+            return self._calculation_time
+        return 0
+
     def _compute_confidence(self, granularity, BED, capacity):
         BED_max = BEDPredictorUpperBoundCorrect(BED).estimate(granularity=granularity)
         upper_bound_optimizer = LPOptimizer().build(BED_max, capacity)
         upper_bound_optimizer.build(BED_max, capacity=capacity)
         print("test")
-        #upper_bound_optimizer.get_optimum()
         upper_bound_obj = upper_bound_optimizer.get_total_BED()
         print(upper_bound_obj, "upper")
-
-        #self.get_optimum()
         lower_bound_obj = self.get_total_BED()
         print(lower_bound_obj, "lower")
-
         confidence_rate = (upper_bound_obj - lower_bound_obj) / lower_bound_obj * 100
         print(confidence_rate)
         self._confidence_rate = confidence_rate
+
+    def _compute_calculation_time(self, granularity, BED):
+        NUM_PATIENTS = BED.shape[0]
+        print ('granularity: ', granularity)
+        calculation_time = granularity*NUM_PATIENTS*5
+        self._calculation_time = calculation_time
 
     def get_optimum(self):
         if not self.optimizer:

@@ -5,10 +5,6 @@ Created on Mon May 29 15:14:59 2017
 @author: DIhnatov
 """
 
-#============================Limitations========================================
-'''PROBLEMS: the lower bound of widget time is not changing with capacity.
-   EXAMPLE: if we have capacity 200 and minimum time for calculation is 3 hour, then if the user will set 2 hour the program will not calculate the result '''
-
 # Import
 from bokeh.io import curdoc
 from bokeh.models import ColumnDataSource
@@ -30,6 +26,7 @@ BED = df.values
 NUM_PATIENTS = BED.shape[0]
 MAX_FRACTIONS = BED.shape[1] - 1
 MIN_LP_TIME = math.ceil(NUM_PATIENTS / 6) # 12 * t[hrs] >= 2 *number_of_patients --> t >= number_of_patients/6
+MAX_LP_TIME = math.ceil(NUM_PATIENTS*MAX_FRACTIONS*5 / 60) # 12 * t[hrs] >= 2 *number_of_patients --> t >= number_of_patients/6
 confidence_rate = 0
 
 # Titles of paragraphs
@@ -37,6 +34,7 @@ p0 = Div(text="""<div style="background-color:#00b33c;color:white;padding:20px;"
 p1 = Div(text="""<font size="+3", color="#154696"><b>Settings: </b></font>""", width=600, height=40)
 p2 = Div(text="""<font size="+3", color="#154696"><b>Results: </b></font>""", width=600, height=50)
 confidence = Paragraph()
+calculation_time = Paragraph()
 
 # Titles of widgets
 RadioButton_title = Div(text="""<font size="-0.5">Select the type of model: </font>""", width=600, height=15)
@@ -64,7 +62,6 @@ capacity_change = CustomJS(args = {'add_params' : add_params, 'time' : time, 'ra
     if(sel_model == sel_model_options['auto']){ // only for Automatic Model Choice
         capacity_val = parseInt(cb_obj.value);
         heur_time = capacity_val * 5 / 60;  // converting heur_time to hours
-        num_patients = add_params.data.num_patients[0];
         min_lp_time = add_params.data.min_lp_time[0];
         use_heur = heur_time < min_lp_time;
         min_time = ((use_heur) ? heur_time : min_lp_time);
@@ -93,24 +90,14 @@ results_table = DataTable(source=source, columns=columns, width=700, height=450)
 #============================FUNCTIONS==========================================
 #Model selection
 def model_selection(attr, old, new):
-    if RadioButton.active == 1: #Heuristic
-        time.title = "1"
-        time.end = 1
-        time.step = 2
-        time.value = MIN_LP_TIME
-    elif RadioButton.active == 0:
-        time.title = 'Set the time for calculation'
-        time.end = 10
-        time.step = 1
+    if RadioButton.active == 0:
         time.value = MIN_LP_TIME
         time.start = MIN_LP_TIME
+        time.end = MAX_LP_TIME
     else:
-        time.title = 'Set the time for calculation'
-        time.end = 10
-        time.step = 1
         heur_time = int(capacity.value) + NUM_PATIENTS
         time.start = time.value = heur_time if heur_time < MIN_LP_TIME else MIN_LP_TIME
-
+        time.end = MAX_LP_TIME
 def get_obj_val(solution, BED):
     total = 0
     for i, j in solution.items():
@@ -124,22 +111,32 @@ def show_table():
     if c >= NUM_PATIENTS * MAX_FRACTIONS: #if the capacity is bigger than num_patient * num_fractions, than no optimization is needed. Everyone will get MAX_FRACTIONS
         results = dict(patients=list(range(0, NUM_PATIENTS)), fractions=[MAX_FRACTIONS] * NUM_PATIENTS)
         confidence_rate = 0
+        calc_time = 0
     else:
         if RadioButton.active == 0:
             opt = SmartOptimizer().build(BED, capacity=c, max_time=t * 60, force_linear = True)
             confidence_rate = opt.get_confidence_rate()
+            calc_time  = opt.get_calculation_time()
         elif RadioButton.active == 1:
             opt = HeuristicOptimizer().build(BED, capacity = c)
             confidence_rate = 0
+            calc_time = opt.get_accesses()*5
         else:
             opt = SmartOptimizer().build(BED, capacity = c, max_time = t*60)
             confidence_rate = opt.get_confidence_rate()
+            heur_time = c * 5 / 60  # converting heur_time to hours
+            if heur_time < MIN_LP_TIME:
+                h = HeuristicOptimizer().build(BED, capacity = c)
+                calc_time = h.get_accesses()*5
+            else:
+                calc_time  = opt.get_calculation_time()
+
         output = opt.get_optimum()
         results = dict(patients=list(output.keys()),
                     fractions=list(output.values()))
     source.data = results
-    confidence.text = "Confidence rate: " + str(confidence_rate)
-
+    confidence.text = "Error rate: " + str(format(confidence_rate, '.2f'))
+    calculation_time.text = "Calculation time: " + str(format(calc_time/60, '.2f')) + " hours"
 # Visualization function
 def l(p0, inputs, table):
     curdoc().add_root(column(p0,row(inputs, table, width = 1200)))
@@ -152,6 +149,6 @@ calculation_button.on_click(show_table)
 # Webpage visualization
 title = p0
 inputs = widgetbox(p1, RadioButton_title, RadioButton, capacity, time, calculation_button, width=550, height=550)
-table = widgetbox(p2, results_table, confidence, width=700, height=500)
+table = widgetbox(p2, results_table, confidence, calculation_time, width=700, height=500)
 l(p0, inputs, table)
 os.system('bokeh serve --show bgui.py')
