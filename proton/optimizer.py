@@ -91,11 +91,15 @@ class SmartOptimizer(ProtonOptimizer):
         else:
             # If we are short on time we need to use the LP model with an estimated BED matrix.
             granularity = math.floor(max_accesses / num_patients)
+            granularity = self.get_correct_granularity(granularity, max_fractions)
             estimated_BED = LinearBEDPredictor(BED).estimate(granularity)
             self.optimizer = LPOptimizer().build(estimated_BED, capacity)
+            print("test1")
             self._compute_confidence(granularity, BED, capacity)
             self.num_lookups = num_patients * granularity
+            print("test3")
             self._compute_calculation_time(granularity, BED)
+            print("test4")
         return self
 
     def get_confidence_rate(self):
@@ -108,6 +112,17 @@ class SmartOptimizer(ProtonOptimizer):
 
     def get_lookups(self):
         return self.num_lookups
+
+    def get_correct_granularity(self, granularity, max_fractions):
+        """Check whether the granularity is within the range. If not, it sets it to the boundaries."""
+        if (granularity <= 1):
+            print("Granularity should >0, setting it to 0.")
+            return 1
+        elif granularity > max_fractions - 1:
+            print("Granularity should < max_fractions_per_patient - 1, setting it to %d." % (max_fractions - 1))
+            return max_fractions - 1
+        else:
+            return granularity
 
     def _compute_confidence(self, granularity, BED, capacity):
         BED_max = BEDPredictorUpperBoundCorrect(BED).estimate(granularity=granularity)
@@ -239,7 +254,7 @@ class HeuristicOptimizer(ProtonOptimizer):
 
         return dict(zip(range(num_patients), state))
 
-    def get_accesses(self):
+    def get_lookups(self):
         if not self.num_accesses:
             self.get_optimum()
         return self.num_accesses

@@ -45,6 +45,13 @@ class LinearBEDPredictor(object):
         difference = estimated - self._BED
         return np.sqrt((difference ** 2).mean(axis=None))
 
+    def granularity_within_range(self, granularity):
+        """Check whether the granularity is ok."""
+        if (granularity <= 1 or granularity > self.max_fractions_per_patient - 1):
+            print("Granularity should be between 2 and num_columns! Now it is %d" % granularity)
+            return False
+        return True
+
     def estimate(self, granularity):
         """
         Check some points in regural intervals and linearly interpolate the rest.
@@ -52,8 +59,7 @@ class LinearBEDPredictor(object):
         @:param granurality: number of actual measurements to check
         @:return estimate, cost: estimated BED matrix, time cost in seconds to compute it
         """
-        if (granularity <= 1 or granularity > (self.max_fractions_per_patient - 1) / 2):
-            print("Granularity should be between 2 and <num_columns/2>!")
+        if (not self.granularity_within_range(granularity)):
             return None
 
         self.access_counter = 0
@@ -135,8 +141,8 @@ class BEDPredictorUpperBoundNaive(LinearBEDPredictor):
         @:param granurality: number of actual measurements to check
         @:return estimate, cost: estimated BED matrix, time cost in seconds to compute it
         """
-        if (granularity <= 1 or granularity > (self.max_fractions_per_patient - 1) / 2):
-            print("Granularity should be between 2 and <num_columns/2>!")
+
+        if (not super(BEDPredictorUpperBoundNaive, self).granularity_within_range(granularity)):
             return None
 
         self.access_counter = 0
@@ -248,8 +254,7 @@ class BEDPredictorUpperBoundCorrect(LinearBEDPredictor):
         @:param granurality: number of actual measurements to check
         @:return estimate, cost: estimated BED matrix, time cost in seconds to compute it
         """
-        if (granularity <= 1 or granularity > (self.max_fractions_per_patient - 1) / 2):
-            print("Granularity should be between 2 and <num_columns/2>!")
+        if (not super(BEDPredictorUpperBoundCorrect, self).granularity_within_range(granularity)):
             return None
 
         self.access_counter = 0
