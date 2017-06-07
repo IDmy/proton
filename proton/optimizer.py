@@ -60,6 +60,7 @@ class SmartOptimizer(ProtonOptimizer):
     def __init__(self):
         self.optimum = {}
         self.optimizer = None
+        self._calculation_time = None
         self._confidence_rate = None
         super(SmartOptimizer, self).__init__()
 

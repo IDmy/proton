@@ -29,11 +29,32 @@ MIN_LP_TIME = math.ceil(NUM_PATIENTS / 6) # 12 * t[hrs] >= 2 *number_of_patients
 MAX_LP_TIME = math.ceil(NUM_PATIENTS*MAX_FRACTIONS*5 / 60) # 12 * t[hrs] >= 2 *number_of_patients --> t >= number_of_patients/6
 confidence_rate = 0
 
+css = """
+<style>
+.bk-root .bk-slider-parent input[type="text"] {
+    width: 10px;
+}
+.bk-root {
+    width: 1100px;
+    margin:0 auto;
+}
+body {
+    width:100%;
+    margin: 0 auto;
+    position:relative;
+}
+.bk-root .bk-layout-fixed.bk-grid-row>div
+  {
+    padding-right:20px;
+  }
+</style>
+"""
 # Titles of paragraphs
-p0 = Div(text="""<div style="background-color:#00b33c;color:white;padding:20px;"><span><center><font size="+5", color="#ffffff", face="Times New Roman"><b>Allocation of proton radiotherapy over patients </b></font></center></span></div>""", width=1350, height=90)
-p1 = Div(text="""<font size="+3", color="#154696"><b>Settings: </b></font>""", width=600, height=40)
-p2 = Div(text="""<font size="+3", color="#154696"><b>Results: </b></font>""", width=600, height=50)
+p0 = Div(text="""<div style="background-color:#386994;color:white;padding:9px; font-size: 29px;border-radius: 3px;"><span><center><b>Allocation of Proton Radiotherapy over Patients </b></center></span></div>""" + css, width=1024, height=39)
+p1 = Div(text="""<font size="+2", color="#154696"><b>Settings</b></font>""", width=600, height=23)
+p2 = Div(text="""<font size="+2", color="#154696"><b>Results </b></font>""", width=600, height=23)
 confidence = Paragraph()
+
 calculation_time = Paragraph()
 
 # Titles of widgets
@@ -148,7 +169,7 @@ calculation_button.on_click(show_table)
 
 # Webpage visualization
 title = p0
-inputs = widgetbox(p1, RadioButton_title, RadioButton, capacity, time, calculation_button, width=550, height=550)
-table = widgetbox(p2, results_table, confidence, calculation_time, width=700, height=500)
+inputs = widgetbox(p1, RadioButton_title, RadioButton, capacity, time, calculation_button, width = 250)
+table = widgetbox(p2, results_table, confidence, calculation_time, height=600, width = 700)
 l(p0, inputs, table)
 os.system('bokeh serve --show bgui.py')
