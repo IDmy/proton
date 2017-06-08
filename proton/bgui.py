@@ -13,16 +13,22 @@ from decimal import *
 import os
 import math
 
+import base64
+from io import StringIO
+
 
 # Read data
 df = pd.read_csv('data/PayoffMatrix.txt', delim_whitespace=True, header=None)
 BED = df.values
 
-#Constants
-NUM_PATIENTS = BED.shape[0]
-MAX_FRACTIONS = BED.shape[1] - 1
-MIN_LP_TIME = math.ceil(NUM_PATIENTS / 6) # 12 * t[hrs] >= 2 *number_of_patients --> t >= number_of_patients/6
-MAX_LP_TIME = math.ceil(NUM_PATIENTS * MAX_FRACTIONS * 5 / 60)
+def init_constanst(BED):
+    global NUM_PATIENTS, MAX_FRACTIONS, MIN_LP_TIME, MAX_LP_TIME
+    NUM_PATIENTS = BED.shape[0]
+    MAX_FRACTIONS = BED.shape[1] - 1
+    MIN_LP_TIME = math.ceil(NUM_PATIENTS / 6) # 12 * t[hrs] >= 2 *number_of_patients --> t >= number_of_patients/6
+    MAX_LP_TIME = math.ceil(NUM_PATIENTS * MAX_FRACTIONS * 5 / 60)
+init_constanst(BED)
+
 error_rate = 0
 
 #CSS for nice visualization of all gui elements
@@ -48,7 +54,7 @@ body {
 """
 
 # Titles of paragraphs
-p0 = Div(text="""<div style="background-color:#386994;color:white;padding:9px; font-size: 29px;border-radius: 3px;"><span><center><b>Allocation of Proton Radiotherapy over Patients </b></center></span></div>""" + css, width=1024, height=39)
+p0 = Div(text="""<div style="background-color:#386994;color:white;padding:9px; font-size: 29px;border-radius: 3px;"><span><center><b>Dispro v.0.1</b></center></span></div>""" + css, width=1024, height=39)
 p1 = Div(text="""<font size="+2", color="#154696"><b>Settings</b></font>""", width=600, height=23)
 p2 = Div(text="""<font size="+2", color="#154696"><b>Results </b></font>""", width=600, height=33)
 error = Paragraph()
@@ -57,7 +63,8 @@ calculation_time = Paragraph()
 total_BED = Paragraph()
 model_type = Paragraph()
 num_of_calls = Paragraph()
-
+info_data_uploaded = Paragraph()
+info_data_uploaded.text = "No data loaded."
 # Titles of widgets
 RadioButton_title = Div(text="""<font size="-0.5">Select the type of model: </font>""", width=600, height=15)
 
@@ -116,6 +123,65 @@ columns = [TableColumn(field="patients", title="Patient ID"),
            TableColumn(field="fractions", title="Number of fractions"),
            TableColumn(field="BED_value", title="BED value")]
 results_table = DataTable(source=source, columns=columns, width=700, height=450)
+
+
+file_source = ColumnDataSource({'file_contents':[], 'file_name':[]})
+
+def file_callback(attr,old,new):
+    global BED
+    print('filename:', file_source.data['file_name'])
+    raw_contents = file_source.data['file_contents'][0]
+    # remove the prefix that JS adds
+    prefix, b64_contents = raw_contents.split(",", 1)
+    file_contents = base64.b64decode(b64_contents)
+    file_io = StringIO(file_contents.decode("utf-8") )
+
+    df = pd.read_csv(file_io, delim_whitespace=True, header=None)
+    init_constanst(df.values) # change the constast
+    model_selection(None, None, None)  # update the time slider
+    info_data_uploaded.text = file_source.data['file_name'][0]
+    BED = df.values
+    print("file contents:")
+    print (df)
+
+file_source.on_change('data', file_callback)
+
+upload_btn = Button(label="Upload", button_type="default")
+upload_btn.callback = CustomJS(args=dict(file_source=file_source), code ="""
+function read_file(filename) {
+    var reader = new FileReader();
+    reader.onload = load_handler;
+    reader.onerror = error_handler;
+    // readAsDataURL represents the file's data as a base64 encoded string
+    reader.readAsDataURL(filename);
+}
+
+function load_handler(event) {
+    var b64string = event.target.result;
+    file_source.data = {'file_contents' : [b64string], 'file_name':[input.files[0].name]};
+    file_source.trigger("change");
+}
+
+function error_handler(evt) {
+    if(evt.target.error.name == "NotReadableError") {
+        alert("Can't read file!");
+    }
+}
+
+var input = document.createElement('input');
+input.setAttribute('type', 'file');
+input.onchange = function(){
+    if (window.FileReader) {
+        read_file(input.files[0]);
+    } else {
+        alert('FileReader is not supported in this browser');
+    }
+}
+input.click();
+""")
+
+
+
 
 #============================FUNCTIONS==========================================
 #Model selection: run when RadioButton pressed
@@ -188,7 +254,7 @@ calculation_button.on_click(show_table)
 
 # Webpage visualization
 title = p0
-inputs = widgetbox(p1, RadioButton_title, RadioButton, capacity, time, calculation_button, width = 250)
+inputs = widgetbox(p1, upload_btn, info_data_uploaded, RadioButton_title, RadioButton, capacity, time, calculation_button, width = 250)
 table = widgetbox(p2, results_table, model_type, total_BED, num_of_calls, error, calculation_time, height=600, width = 700)
 l(p0, inputs, table)
 os.system('bokeh serve --show bgui.py')
