@@ -20,6 +20,9 @@ import bgui_js_handlers
 
 def create_BED_figure(BED, BED_min, BED_max, looked_up_inds, patient_num, max_fractions, output_file):
     """Create plot with BED figure and save it into output_file."""
+    BED = pd.DataFrame(BED)
+    BED_min = pd.DataFrame(BED_min)
+    BED_max = pd.DataFrame(BED_max)
     Y_plots = 3  # plots per row
     X_plots = math.ceil((patient_num) / Y_plots)
     fig, axarr = plt.subplots(X_plots, Y_plots, sharex=True)  # sharex='col', sharey='row'
@@ -66,12 +69,13 @@ def get_img_obj(path):
 def update_BED_fig_img(gran):
     global BED_fig_ds
     if gran is not None:
-        BED_min = pd.DataFrame(LinearBEDPredictor(BED).estimate(granularity=gran))
-        BED_max_concave = pd.DataFrame(BEDPredictorUpperBoundCorrect(BED).estimate(granularity=gran))
+        BED_min = LinearBEDPredictor(BED).estimate(granularity=gran)
+        BED_max_concave = BEDPredictorUpperBoundCorrect(BED).estimate(granularity=gran)
         interp_step = MAX_FRACTIONS / (gran - 1)  # take out -1
         looked_up_inds = [int(i * interp_step) for i in range(gran)]
-        create_BED_figure(df, BED_min, BED_max_concave, looked_up_inds, NUM_PATIENTS, MAX_FRACTIONS, BED_FIG_FILENAME)
+        create_BED_figure(BED, BED_min, BED_max_concave, looked_up_inds, NUM_PATIENTS, MAX_FRACTIONS, BED_FIG_FILENAME)
         img = get_img_obj(BED_FIG_FILENAME)
+        print("BED fig updated.")
     else:
         img = get_img_obj('static/under_construction.png')
     BED_fig_ds.data = dict(image=[img])
@@ -92,6 +96,7 @@ def upl_file_callback(attr, old, new):
     BED = df.values
     num_patients.data = dict(val = [BED.shape[0]])
     NUM_PATIENTS = BED.shape[0]
+    print('file uploaded.')
 
 def hide_figure_non_essentials(fig):
     """Hide everything from a bokeh figure apart from the content part."""
@@ -148,9 +153,11 @@ def calculation_btn_clicked():
                        fractions=list(output.values()),
                        BED_value=output_value)
     # Returns
+
     update_BED_fig_img(gran)
     BED_data_source.data = results
     model_type.text = "Model type: " + opt.get_type()
+
     total_BED.text = "Total BED: " + str(format(opt.get_total_BED(), '.2f'))
     num_of_calls.text = "Number of calls: " + str(number_calls_text)
     error.text = "Error rate: " + str(format(error_rate, '.2f'))
