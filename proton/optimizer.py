@@ -65,6 +65,7 @@ class SmartOptimizer(ProtonOptimizer):
         self.optimizer = None
         self.num_lookups = None
         self.error_rate = None
+        self._granularity = None
         super(SmartOptimizer, self).__init__()
 
     def build(self, BED, capacity=100, max_time=None, model_name='smart_optimizer', time_per_access = TIME_PER_ACCESS, force_linear = False):
@@ -90,37 +91,40 @@ class SmartOptimizer(ProtonOptimizer):
             self.error_rate = 0
         else:
             # If we are short on time we need to use the LP model with an estimated BED matrix.
-            granularity = math.floor(max_accesses / num_patients)
-            granularity = self.get_correct_granularity(granularity, max_fractions)
-            estimated_BED = LinearBEDPredictor(BED).estimate(granularity)
+            self._granularity = math.floor(max_accesses / num_patients)
+            self._granularity = self.get_correct_granularity(max_fractions)
+            estimated_BED = LinearBEDPredictor(BED).estimate(self._granularity)
             self.optimizer = LPOptimizer().build(estimated_BED, capacity)
-            self._compute_error(granularity, BED, capacity)
-            self.num_lookups = num_patients * granularity
+            self._compute_error(BED, capacity)
+            self.num_lookups = num_patients * self._granularity
 
         return self
+
+    def get_granularity(self):
+        return self._granularity
 
     def get_error_rate(self):
         return self.error_rate
 
-    def get_calculation_time(self, time_per_access = 5):
-        return self.num_lookups * time_per_access
+    # def get_calculation_time(self, time_per_access = 5):
+    #     return self.num_lookups * time_per_access
 
     def get_lookups(self):
         return self.num_lookups
 
-    def get_correct_granularity(self, granularity, max_fractions):
+    def get_correct_granularity(self, max_fractions):
         """Check whether the granularity is within the range. If not, it sets it to the boundaries."""
-        if (granularity <= 1):
+        if (self._granularity <= 1):
             print("Granularity should >0, setting it to 0.")
             return 1
-        elif granularity > max_fractions - 1:
+        elif self._granularity > max_fractions - 1:
             print("Granularity should < max_fractions_per_patient - 1, setting it to %d." % (max_fractions - 1))
             return max_fractions - 1
         else:
-            return granularity
+            return self._granularity
 
-    def _compute_error(self, granularity, BED, capacity):
-        BED_max = BEDPredictorUpperBoundCorrect(BED).estimate(granularity=granularity)
+    def _compute_error(self, BED, capacity):
+        BED_max = BEDPredictorUpperBoundCorrect(BED).estimate(granularity=self._granularity)
         upper_bound_optimizer = LPOptimizer().build(BED_max, capacity)
         upper_bound_obj = upper_bound_optimizer.get_total_BED()
         lower_bound_obj = self.get_total_BED()

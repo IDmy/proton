@@ -1,0 +1,70 @@
+in_model_rdn_btn_callback_code = """
+    var sel_model_options = {linear : 0 , heuristic : 1, auto : 2 };
+    var sel_model = radioButton.attributes.active;
+    if(sel_model == sel_model_options['heuristic']) {
+        document.getElementsByClassName("bk-slider-parent")[0].style.display = "none";
+    } else {
+        document.getElementsByClassName("bk-slider-parent")[0].style.display = "block";
+    }
+"""
+
+in_capacity_txt_callback_code="""
+    // Hides or shows the time slider dependening whether LP or HEUR is used
+    console.log(time.id);
+    var sel_model_options = {linear : 0 , heuristic : 1, auto : 2 };
+    var sel_model = radioButton.attributes.active;
+    if(sel_model == sel_model_options['auto']){ // only for Automatic Model Choice
+        capacity_val = parseInt(cb_obj.value);
+        heur_time = (capacity_val + num_patients) * 5 / 60;  // converting heur_time to hours
+        min_lp_time = min_time.data.val[0];
+        use_heur = heur_time < min_lp_time;
+        min_time = ((use_heur) ? heur_time : min_lp_time);
+        if(use_heur) {
+            document.getElementsByClassName("bk-slider-parent")[0].style.display = "none";
+        } else {
+            document.getElementsByClassName("bk-slider-parent")[0].style.display = "block";
+            time.set('value', min_time);
+            time.set('start', min_time);
+        }
+    }
+"""
+
+upload_btn_callback_code = """
+function read_file(filename) {
+    var reader = new FileReader();
+    reader.onload = load_handler;
+    reader.onerror = error_handler;
+    // readAsDataURL represents the file's data as a base64 encoded string
+    reader.readAsDataURL(filename);
+}
+
+function load_handler(event) {
+    var b64string = event.target.result;
+    file_source.data = {'file_contents' : [b64string], 'file_name':[input.files[0].name]};
+    file_source.trigger("change");
+}
+
+function error_handler(evt) {
+    if(evt.target.error.name == "NotReadableError") {
+        alert("Can't read file!");
+    }
+}
+
+var input = document.createElement('input');
+input.setAttribute('type', 'file');
+input.onchange = function(){
+    if (window.FileReader) {
+        read_file(input.files[0]);
+    } else {
+        alert('FileReader is not supported in this browser');
+    }
+}
+input.click();
+"""
+
+calculation_button_callback_code = """
+    fig.set('plot_height', num_patients.data.val[0] * 36);
+    fig.set('height', num_patients.data.val[0] * 36);
+    fig.document.resize();
+    console.log(fig);   
+"""
